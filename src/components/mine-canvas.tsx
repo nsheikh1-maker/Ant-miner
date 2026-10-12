@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { formatAmount, type World } from "../game/economy";
+import { WORLDS, formatAmount, type World } from "../game/economy";
 
 type Boss = { hp: number; max: number; breaks: number };
 
@@ -37,8 +37,8 @@ function loadImage(src: string) {
 }
 
 type Art = {
-  cave: HTMLImageElement;
-  vein: HTMLImageElement;
+  pit: HTMLImageElement;
+  worlds: HTMLImageElement[];
   coin: HTMLImageElement;
   ants: HTMLImageElement[];
 };
@@ -49,8 +49,8 @@ function getArt(): Art | null {
   if (typeof Image === "undefined") return null;
   if (!artCache) {
     artCache = {
-      cave: loadImage("/art/mine-pit.jpg"),
-      vein: loadImage("/art/vein.webp"),
+      pit: loadImage("/art/mine-pit.jpg"),
+      worlds: WORLDS.map((_, index) => loadImage(`/art/world-${index}.jpg`)),
       coin: loadImage("/art/coin.png"),
       ants: [1, 2, 3, 4].map((frame) => loadImage(`/art/ant-${frame}.png`)),
     };
@@ -69,86 +69,16 @@ function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, width
   ctx.drawImage(image, (width - dw) * 0.5, (height - dh) * 0.62, dw, dh);
 }
 
-function tunnelAt(width: number, height: number, depth: number, lane: number) {
-  const y = height * 0.9 + (height * 0.5 - height * 0.9) * depth;
-  const half = width * (0.34 - depth * 0.22);
-  const x = width / 2 + lane * half * 0.72;
-  const size = 92 - depth * 58;
+function trackAt(width: number, height: number, depth: number, lane: number) {
+  const y = height * (0.8 - depth * 0.24);
+  const x = width * (0.16 + lane * 0.07 + depth * 0.3);
+  const size = Math.max(36, 128 * (1 - depth * 0.62));
   return { x, y, size };
 }
 
-function drawTunnel(ctx: CanvasRenderingContext2D, width: number, height: number) {
-  ctx.fillStyle = "rgba(6, 4, 3, 0.38)";
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.beginPath();
-  ctx.moveTo(width * 0.06, height * 0.96);
-  ctx.lineTo(width * 0.4, height * 0.52);
-  ctx.lineTo(width * 0.6, height * 0.52);
-  ctx.lineTo(width * 0.94, height * 0.96);
-  ctx.closePath();
-  ctx.fillStyle = "#2a1c12";
-  ctx.fill();
-
-  ctx.strokeStyle = "#d7b56a";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(width * 0.28, height * 0.96);
-  ctx.lineTo(width * 0.46, height * 0.54);
-  ctx.moveTo(width * 0.72, height * 0.96);
-  ctx.lineTo(width * 0.54, height * 0.54);
-  ctx.stroke();
-
-  for (let beam = 1; beam <= 4; beam += 1) {
-    const depth = beam / 5;
-    const y = height * 0.96 + (height * 0.52 - height * 0.96) * depth;
-    const left = width * 0.06 + (width * 0.4 - width * 0.06) * depth;
-    const right = width * 0.94 + (width * 0.6 - width * 0.94) * depth;
-    const top = height * 0.12 + (height * 0.3 - height * 0.12) * depth;
-    ctx.strokeStyle = "#7a5230";
-    ctx.lineWidth = Math.max(3, 10 * (1 - depth));
-    ctx.beginPath();
-    ctx.moveTo(left, y);
-    ctx.lineTo(left, top);
-    ctx.lineTo(right, top);
-    ctx.lineTo(right, y);
-    ctx.stroke();
-  }
-}
-
-function drawAnt(
-  ctx: CanvasRenderingContext2D,
-  image: HTMLImageElement | undefined,
-  size: number,
-  frame: number,
-  facing: number,
-  digging: boolean,
-) {
+function drawAnt(ctx: CanvasRenderingContext2D, image: HTMLImageElement, size: number, facing: number) {
   ctx.scale(facing, 1);
-  if (digging) ctx.rotate(-0.45);
-  if (ready(image)) {
-    ctx.drawImage(image, -size / 2, -size / 2, size, size);
-    return;
-  }
-  const step = Math.sin(frame) * size * 0.12;
-  ctx.fillStyle = "#1a100c";
-  ctx.beginPath();
-  ctx.ellipse(size * 0.08, 0, size * 0.28, size * 0.16, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(-size * 0.22, -size * 0.02, size * 0.14, size * 0.12, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "#1a100c";
-  ctx.lineWidth = Math.max(2, size * 0.05);
-  ctx.lineCap = "round";
-  for (const side of [-1, 1]) {
-    for (const leg of [-0.7, 0, 0.7]) {
-      ctx.beginPath();
-      ctx.moveTo(leg * size * 0.16, side * size * 0.08);
-      ctx.lineTo(leg * size * 0.28, side * size * 0.22 + (leg === 0 ? step : -step));
-      ctx.stroke();
-    }
-  }
+  ctx.drawImage(image, -size / 2, -size * 0.82, size, size);
 }
 
 type Props = {
@@ -277,44 +207,31 @@ export function MineCanvas({ playing, world, miners, haulers, perSec, shake, bos
       ctx.translate(ox, oy);
 
       const pictures = getArt();
-      if (pictures && ready(pictures.cave)) drawCover(ctx, pictures.cave, width, height);
+      const worldIndex = Math.max(0, WORLDS.findIndex((item) => item.name === view.world.name));
+      const scene = pictures?.worlds[worldIndex];
+      const backdrop = ready(scene) ? scene : pictures?.pit;
+      if (ready(backdrop)) drawCover(ctx, backdrop, width, height);
       else {
         ctx.fillStyle = "#1a120c";
         ctx.fillRect(0, 0, width, height);
       }
 
-      const count = view.playing ? Math.min(8, 1 + view.miners) : 0;
-      const ant = pictures?.ants[Math.floor(now / 140) % 4];
-      if (view.playing) drawTunnel(ctx, width, height);
-
-      if (view.playing && pictures && ready(pictures.vein)) {
-        const face = tunnelAt(width, height, 0.96, 0);
-        const vw = Math.min(width * 0.2, 150);
-        const vh = vw * (pictures.vein.naturalHeight / Math.max(1, pictures.vein.naturalWidth));
-        const pulse = 1 + Math.sin(Math.min(1, state.squash) * Math.PI) * 0.08;
-        ctx.save();
-        ctx.translate(face.x, face.y - vh * 0.35);
-        ctx.scale(pulse, 2 - pulse);
-        ctx.drawImage(pictures.vein, -vw / 2, -vh / 2, vw, vh);
-        ctx.restore();
-      }
-
-      if (count > 0) {
+      const count = view.playing ? Math.min(6, 1 + Math.min(5, view.miners)) : 0;
+      const frames = pictures?.ants.filter(ready) ?? [];
+      const ant = frames.length > 0 ? frames[Math.floor(now / 160) % frames.length] : undefined;
+      if (count > 0 && ready(ant)) {
         const marchers = Array.from({ length: count }, (_, index) => {
-          const lane = index % 3 === 0 ? 0 : index % 3 === 1 ? -1 : 1;
-          const depth = ((now / 1000) * (0.16 + (index % 3) * 0.03) + index * 0.17) % 1;
-          const hauling = view.haulers > 0 && index % 4 === 3;
-          const travel = hauling ? 1 - depth : depth;
-          return { index, lane, travel, hauling };
+          const lane = (index % 3) - 1;
+          const depth = ((now / 1000) * 0.12 + index * 0.18) % 1;
+          const hauling = view.haulers > 0 && index % 3 === 2;
+          return { index, lane, travel: hauling ? 1 - depth : depth, hauling };
         }).sort((a, b) => a.travel - b.travel);
 
         for (const walker of marchers) {
-          const spot = tunnelAt(width, height, walker.travel, walker.lane);
-          const digging = !walker.hauling && walker.travel > 0.86;
-          const frame = now / 120 + walker.index;
+          const spot = trackAt(width, height, walker.travel, walker.lane);
           ctx.save();
-          ctx.translate(spot.x, spot.y - spot.size * 0.35);
-          drawAnt(ctx, ant, spot.size, frame, walker.hauling ? -1 : 1, digging);
+          ctx.translate(spot.x, spot.y);
+          drawAnt(ctx, ant, spot.size, walker.hauling ? -1 : 1);
           ctx.restore();
         }
       }
@@ -360,16 +277,6 @@ export function MineCanvas({ playing, world, miners, haulers, perSec, shake, bos
           ctx.fillRect(-mote.size / 2, -mote.size / 2, mote.size, mote.size * 0.65);
         }
         ctx.restore();
-      }
-
-      if (view.playing && state.hits === 0) {
-        const blink = 0.65 + Math.sin(now / 220) * 0.35;
-        ctx.globalAlpha = blink;
-        ctx.font = "700 20px Pixelify Sans, sans-serif";
-        ctx.fillStyle = "#ffe7a3";
-        ctx.textAlign = "center";
-        ctx.fillText(view.miners > 0 ? "ANTS IN THE TUNNEL" : "YOUR ANT DIGS THE TUNNEL", width / 2, height * 0.78);
-        ctx.globalAlpha = 1;
       }
 
       ctx.restore();
