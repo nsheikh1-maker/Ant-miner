@@ -281,7 +281,7 @@ export function MineStage({
         )}
         <div className="cta">
           {playing ? (
-            <p className="key-hint">Hold the gold · Space</p>
+            <p className="key-hint">Ants walk the tunnel · tap to dig faster</p>
           ) : (
             <>
               <p className="zone">
