@@ -280,9 +280,7 @@ export function MineStage({
           </div>
         )}
         <div className="cta">
-          {playing ? (
-            <p className="key-hint">Ants walk the tunnel · tap to dig faster</p>
-          ) : (
+          {playing ? null : (
             <>
               <p className="zone">
                 <i className="live-dot" aria-hidden="true" />
