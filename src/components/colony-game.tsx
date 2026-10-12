@@ -1,5 +1,4 @@
 import {
-  ArrowUp,
   Check,
   Cloud,
   Coins,
@@ -10,7 +9,6 @@ import {
   Plus,
   RotateCcw,
   Settings,
-  ShoppingCart,
   Trophy,
   Truck,
   Upload,
@@ -56,15 +54,6 @@ import { MineStage } from "./mine-stage";
 
 type Tab = "Mine" | "Upgrades" | "Ants" | "Vehicles" | "Map" | "Shop";
 
-const NAV: { id: Tab; label: string; icon: typeof Pickaxe }[] = [
-  { id: "Mine", label: "Mine", icon: Pickaxe },
-  { id: "Upgrades", label: "Upgrades", icon: ArrowUp },
-  { id: "Ants", label: "Ants", icon: Users },
-  { id: "Vehicles", label: "Vehicles", icon: Truck },
-  { id: "Map", label: "Map", icon: Map },
-  { id: "Shop", label: "Shop", icon: ShoppingCart },
-];
-
 const SHOP_TABS: { id: Tab; label: string }[] = [
   { id: "Mine", label: "All" },
   { id: "Upgrades", label: "Upgrades" },
@@ -76,9 +65,8 @@ const SHOP_TABS: { id: Tab; label: string }[] = [
 export function ColonyGame() {
   const colony = useColony();
   const user = useCurrentUser();
-  const [playing, setPlaying] = useState(true);
+  const [playing, setPlaying] = useState(false);
   const [tab, setTab] = useState<Tab>("Mine");
-  const [sheet, setSheet] = useState<"map" | "colony" | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
   const [treasuryOpen, setTreasuryOpen] = useState(false);
@@ -92,10 +80,8 @@ export function ColonyGame() {
     const bootWorld = WORLDS[booted.focus] ?? WORLDS[0];
     if (!(booted.mode === "ranked" && booted.maintenance) && booted.total >= bootWorld.goal) {
       booted.enterFocus();
-      setPlaying(true);
-    } else if (booted.mode === "ranked" && booted.maintenance) {
-      setPlaying(false);
     }
+    setPlaying(false);
     let raf = 0;
     let last = performance.now();
     let acc = 0;
@@ -224,19 +210,7 @@ export function ColonyGame() {
   function switchMode(mode: PlayMode) {
     if (mode === useColony.getState().mode) return;
     useColony.getState().setMode(mode);
-    const next = useColony.getState();
-    const world = WORLDS[next.focus] ?? WORLDS[0];
-    const paused = mode === "ranked" && next.maintenance;
-    if (!paused && next.total >= world.goal) {
-      next.enterFocus();
-      setPlaying(true);
-    } else {
-      setPlaying(false);
-    }
-  }
-
-  function toggleSheet(next: "map" | "colony") {
-    setSheet((current) => (current === next ? null : next));
+    setPlaying(false);
   }
 
   const ranked = colony.mode === "ranked";
@@ -244,7 +218,7 @@ export function ColonyGame() {
   const modal = settingsOpen || boardOpen || treasuryOpen;
 
   return (
-    <main className="pit">
+    <main className={playing ? "pit" : "hub"}>
       <header className="topbar">
         <button type="button" className="profile" onClick={() => setSettingsOpen(true)}>
           <img className="avatar" src="/art/avatar.jpg" alt="" width={48} height={48} />
@@ -266,7 +240,7 @@ export function ColonyGame() {
           </span>
         </button>
         <div className="wallet">
-          <Coin mark="Ƶ" label="zec" value={formatSide(colony.zec)} testId="balance-zec" tone="zec" />
+          <Coin mark="Ƒ" label="zec" value={formatSide(colony.zec)} testId="balance-zec" tone="zec" />
           <Coin mark="✦" label="ANT" value={formatAmount(colony.ant)} testId="balance-ANT" tone="ant" hot />
           <Coin mark="a" label="ansem" value={formatSide(colony.ansem)} testId="balance-ansem" tone="ansem" />
         </div>
@@ -337,6 +311,7 @@ export function ColonyGame() {
         </div>
       ) : null}
 
+      {playing ? (
       <section className="pit-stage">
         <MineStage
           playing={playing && !modal}
@@ -359,7 +334,7 @@ export function ColonyGame() {
               : null
           }
           onPlay={playFocused}
-          onLeave={() => toggleSheet("map")}
+          onLeave={leave}
           onDig={() => {
             unlockAudio();
             const before = useColony.getState().notice;
@@ -374,16 +349,31 @@ export function ColonyGame() {
           }}
         />
       </section>
-
-      {sheet ? (
-        <div className="sheet" role="dialog" aria-label={sheet === "map" ? "Worlds" : "Colony"}>
-          <div className="sheet-bar">
-            <strong>{sheet === "map" ? "Worlds" : "Colony"}</strong>
-            <button type="button" className="text-btn" onClick={() => setSheet(null)}>
-              Close
-            </button>
-          </div>
-          {sheet === "map" ? (
+      ) : (
+      <>
+      <section className="hub-hero">
+        <p>The colony is calling</p>
+        <h1>ANT MINE</h1>
+        <p className="hub-coins">$zec · $ANT · $ansem</p>
+        <p className="colony-online">
+          Colony online <strong>{formatRate(perSec)} $ANT / sec</strong>
+        </p>
+      </section>
+      <button
+        type="button"
+        className="play-card"
+        disabled={focusLocked || paused}
+        onClick={playFocused}
+      >
+        <img src={`/art/world-${shownIndex}.jpg`} alt="" width={960} height={540} />
+        <span className="play-card-copy">
+          <small>{shown.zone}</small>
+          <strong>
+            Play level {shownIndex + 1} · {shown.name}
+          </strong>
+          <em>{focusLocked ? `${formatAmount(focus.goal)} $ANT to unlock` : `${shown.reward}× rewards`}</em>
+        </span>
+      </button>
       <section className="band" id="worlds">
         <div className="section-head">
           <h2>
@@ -409,10 +399,7 @@ export function ColonyGame() {
                     return;
                   }
                   colony.setFocus(index);
-                  if (useColony.getState().enterFocus()) {
-                    setPlaying(true);
-                    setSheet(null);
-                  }
+                  if (useColony.getState().enterFocus()) setPlaying(true);
                 }}
               >
                 <img src={`/art/world-${index}.jpg`} alt="" width={640} height={360} loading="lazy" />
@@ -432,7 +419,6 @@ export function ColonyGame() {
           })}
         </div>
       </section>
-          ) : (
       <section className="band" id="colony">
         <div className="section-head">
           <h2>
@@ -540,64 +526,8 @@ export function ColonyGame() {
           </div>
         </div>
       </section>
-        )}
-        </div>
-      ) : null}
-
-      <div className="hire-rail" aria-label="Hire the colony">
-        <button
-          type="button"
-          className="hire"
-          disabled={!Number.isFinite(upgrade) || colony.ant < upgrade}
-          onClick={() => {
-            if (useColony.getState().upgradePick() && useColony.getState().sound) playBuy();
-          }}
-        >
-          <img src="/art/vein.webp" alt="" width={64} height={64} />
-          <span>
-            <strong>Pickaxe</strong>
-            <small>{formatAmount(colony.pick)} / tap</small>
-          </span>
-          <b>{formatPrice(upgrade)}</b>
-        </button>
-        {UNITS.filter((unit) => unit.id === "worker" || unit.id === "digger" || unit.id === "cart").map((unit) => {
-          const count = colony.owned[unit.id] ?? 0;
-          const price = unitPrice(unit.base, count);
-          return (
-            <button
-              key={unit.id}
-              type="button"
-              className="hire"
-              disabled={!Number.isFinite(price) || colony.ant < price}
-              onClick={() => buyUnit(unit.id)}
-            >
-              <img src="/art/ant-1.png" alt="" width={64} height={64} />
-              <span>
-                <strong>
-                  {unit.name} <em>×{count}</em>
-                </strong>
-                <small>+{formatRate(unit.cps * active.reward)} / sec</small>
-              </span>
-              <b>{formatPrice(price)}</b>
-            </button>
-          );
-        })}
-      </div>
-
-      <nav className="dock" aria-label="Mine dock">
-        <button type="button" className={sheet === "colony" ? "dock-btn on" : "dock-btn"} onClick={() => toggleSheet("colony")}>
-          <Users aria-hidden="true" />
-          Colony
-        </button>
-        <div className="dock-stat">
-          <strong>{formatRate(perSec)}</strong>
-          <small>$ANT / sec</small>
-        </div>
-        <button type="button" className={sheet === "map" ? "dock-btn on" : "dock-btn"} onClick={() => toggleSheet("map")}>
-          <Map aria-hidden="true" />
-          Worlds
-        </button>
-      </nav>
+      </>
+      )}
 
       {colony.notice ? (
         <p className="toast" role="status">
