@@ -69,6 +69,88 @@ function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, width
   ctx.drawImage(image, (width - dw) * 0.5, (height - dh) * 0.62, dw, dh);
 }
 
+function tunnelAt(width: number, height: number, depth: number, lane: number) {
+  const y = height * 0.9 + (height * 0.5 - height * 0.9) * depth;
+  const half = width * (0.34 - depth * 0.22);
+  const x = width / 2 + lane * half * 0.72;
+  const size = 92 - depth * 58;
+  return { x, y, size };
+}
+
+function drawTunnel(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  ctx.fillStyle = "rgba(6, 4, 3, 0.38)";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.beginPath();
+  ctx.moveTo(width * 0.06, height * 0.96);
+  ctx.lineTo(width * 0.4, height * 0.52);
+  ctx.lineTo(width * 0.6, height * 0.52);
+  ctx.lineTo(width * 0.94, height * 0.96);
+  ctx.closePath();
+  ctx.fillStyle = "#2a1c12";
+  ctx.fill();
+
+  ctx.strokeStyle = "#d7b56a";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(width * 0.28, height * 0.96);
+  ctx.lineTo(width * 0.46, height * 0.54);
+  ctx.moveTo(width * 0.72, height * 0.96);
+  ctx.lineTo(width * 0.54, height * 0.54);
+  ctx.stroke();
+
+  for (let beam = 1; beam <= 4; beam += 1) {
+    const depth = beam / 5;
+    const y = height * 0.96 + (height * 0.52 - height * 0.96) * depth;
+    const left = width * 0.06 + (width * 0.4 - width * 0.06) * depth;
+    const right = width * 0.94 + (width * 0.6 - width * 0.94) * depth;
+    const top = height * 0.12 + (height * 0.3 - height * 0.12) * depth;
+    ctx.strokeStyle = "#7a5230";
+    ctx.lineWidth = Math.max(3, 10 * (1 - depth));
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(left, top);
+    ctx.lineTo(right, top);
+    ctx.lineTo(right, y);
+    ctx.stroke();
+  }
+}
+
+function drawAnt(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement | undefined,
+  size: number,
+  frame: number,
+  facing: number,
+  digging: boolean,
+) {
+  ctx.scale(facing, 1);
+  if (digging) ctx.rotate(-0.45);
+  if (ready(image)) {
+    ctx.drawImage(image, -size / 2, -size / 2, size, size);
+    return;
+  }
+  const step = Math.sin(frame) * size * 0.12;
+  ctx.fillStyle = "#1a100c";
+  ctx.beginPath();
+  ctx.ellipse(size * 0.08, 0, size * 0.28, size * 0.16, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(-size * 0.22, -size * 0.02, size * 0.14, size * 0.12, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#1a100c";
+  ctx.lineWidth = Math.max(2, size * 0.05);
+  ctx.lineCap = "round";
+  for (const side of [-1, 1]) {
+    for (const leg of [-0.7, 0, 0.7]) {
+      ctx.beginPath();
+      ctx.moveTo(leg * size * 0.16, side * size * 0.08);
+      ctx.lineTo(leg * size * 0.28, side * size * 0.22 + (leg === 0 ? step : -step));
+      ctx.stroke();
+    }
+  }
+}
+
 type Props = {
   playing: boolean;
   world: World;
@@ -201,57 +283,40 @@ export function MineCanvas({ playing, world, miners, haulers, perSec, shake, bos
         ctx.fillRect(0, 0, width, height);
       }
 
-      const count = view.playing ? Math.min(7, Math.max(1, view.miners)) : 0;
+      const count = view.playing ? Math.min(8, 1 + view.miners) : 0;
       const ant = pictures?.ants[Math.floor(now / 140) % 4];
-      const floor = height * 0.8;
-      if (count > 0 && ready(ant)) {
-        for (let index = 0; index < count; index += 1) {
-          const speed = 78 + (index % 3) * 16;
-          const span = width + 140;
-          const x = ((now / 1000) * speed + index * (span / count)) % span - 70;
-          const bob = media.matches ? 0 : Math.sin(now / 150 + index) * 2;
-          const size = index === 0 && view.haulers > 0 ? 96 : 76;
-          const near = Math.abs(x + size / 2 - width / 2) < 70;
-          const swing = near && state.squash > 0.2 ? -0.35 : 0;
-          ctx.save();
-          ctx.translate(x + size / 2, floor - size / 2 + bob);
-          ctx.rotate(swing);
-          ctx.drawImage(ant, -size / 2, -size / 2, size, size);
-          ctx.restore();
-        }
-      }
+      if (view.playing) drawTunnel(ctx, width, height);
 
       if (view.playing && pictures && ready(pictures.vein)) {
-        const vw = Math.min(width * 0.38, 250);
+        const face = tunnelAt(width, height, 0.96, 0);
+        const vw = Math.min(width * 0.2, 150);
         const vh = vw * (pictures.vein.naturalHeight / Math.max(1, pictures.vein.naturalWidth));
-        const top = height * 0.46 - vh / 2;
-        const pulse = 1 + Math.sin(Math.min(1, state.squash) * Math.PI) * 0.14;
+        const pulse = 1 + Math.sin(Math.min(1, state.squash) * Math.PI) * 0.08;
         ctx.save();
-        ctx.translate(width / 2, top + vh * 0.62);
+        ctx.translate(face.x, face.y - vh * 0.35);
         ctx.scale(pulse, 2 - pulse);
-        ctx.translate(-width / 2, -(top + vh * 0.62));
-        if (state.fever > 1) {
-          ctx.shadowColor = "#ffd36a";
-          ctx.shadowBlur = 28;
-        }
-        ctx.drawImage(pictures.vein, width / 2 - vw / 2, top, vw, vh);
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = "rgba(42, 18, 8, 0.9)";
-        ctx.lineWidth = 2.5;
-        ctx.lineCap = "round";
-        for (const crack of state.cracks) {
-          ctx.beginPath();
-          ctx.moveTo(width / 2 + crack.x1 * vw, top + vh * 0.48 + crack.y1 * vh);
-          ctx.lineTo(width / 2 + crack.x2 * vw, top + vh * 0.48 + crack.y2 * vh);
-          ctx.stroke();
-        }
-        if (state.combo > 1) {
-          ctx.font = "700 26px Pixelify Sans, sans-serif";
-          ctx.fillStyle = "#2a1c08";
-          ctx.textAlign = "center";
-          ctx.fillText(`${state.combo}×`, width / 2, top + 36);
-        }
+        ctx.drawImage(pictures.vein, -vw / 2, -vh / 2, vw, vh);
         ctx.restore();
+      }
+
+      if (count > 0) {
+        const marchers = Array.from({ length: count }, (_, index) => {
+          const lane = index % 3 === 0 ? 0 : index % 3 === 1 ? -1 : 1;
+          const depth = ((now / 1000) * (0.16 + (index % 3) * 0.03) + index * 0.17) % 1;
+          const hauling = view.haulers > 0 && index % 4 === 3;
+          const travel = hauling ? 1 - depth : depth;
+          return { index, lane, travel, hauling };
+        }).sort((a, b) => a.travel - b.travel);
+
+        for (const walker of marchers) {
+          const spot = tunnelAt(width, height, walker.travel, walker.lane);
+          const digging = !walker.hauling && walker.travel > 0.86;
+          const frame = now / 120 + walker.index;
+          ctx.save();
+          ctx.translate(spot.x, spot.y - spot.size * 0.35);
+          drawAnt(ctx, ant, spot.size, frame, walker.hauling ? -1 : 1, digging);
+          ctx.restore();
+        }
       }
 
       if (view.boss && view.playing) {
@@ -303,7 +368,7 @@ export function MineCanvas({ playing, world, miners, haulers, perSec, shake, bos
         ctx.font = "700 20px Pixelify Sans, sans-serif";
         ctx.fillStyle = "#ffe7a3";
         ctx.textAlign = "center";
-        ctx.fillText("HOLD ANYWHERE", width / 2, height * 0.9);
+        ctx.fillText(view.miners > 0 ? "ANTS IN THE TUNNEL" : "YOUR ANT DIGS THE TUNNEL", width / 2, height * 0.78);
         ctx.globalAlpha = 1;
       }
 
