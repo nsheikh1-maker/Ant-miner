@@ -240,7 +240,7 @@ export function ColonyGame() {
           </span>
         </button>
         <div className="wallet">
-          <Coin mark="Ƒ" label="zec" value={formatSide(colony.zec)} testId="balance-zec" tone="zec" />
+          <Coin mark="Ƶ" label="zec" value={formatSide(colony.zec)} testId="balance-zec" tone="zec" />
           <Coin mark="✦" label="ANT" value={formatAmount(colony.ant)} testId="balance-ANT" tone="ant" hot />
           <Coin mark="a" label="ansem" value={formatSide(colony.ansem)} testId="balance-ansem" tone="ansem" />
         </div>
